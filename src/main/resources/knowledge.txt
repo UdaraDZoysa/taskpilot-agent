@@ -1,0 +1,6 @@
+Class names should be nouns and use PascalCase.
+Method names should use camelCase and describe an action.
+Public methods should include meaningful names.
+Empty methods are usually a code smell.
+Avoid generic class names like Test or MyClass.
+If class name Test or MyClass is used, it should change into PracticeClass1.
