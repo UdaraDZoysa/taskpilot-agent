@@ -10,14 +10,21 @@ import java.util.List;
 public class TaskAgent {
     private final TaskPlanner taskPlanner;
     private final List<Tool> tools;
+    private final AgentMemory memory;
 
-    public TaskAgent(TaskPlanner taskPlanner, List<Tool> tools) {
+    public TaskAgent(TaskPlanner taskPlanner,
+                     List<Tool> tools,
+                     AgentMemory memory) {
         this.taskPlanner = taskPlanner;
         this.tools = tools;
+        this.memory = memory;
     }
 
     public String execute(String goal){
+        memory.remember("GOAL: "+goal);
+
         String plan = taskPlanner.plan(goal);
+        memory.remember("PLAN: "+plan);
 
         // Simple rule-based tool selection (for now)
         Tool analysisTool = tools.stream()
@@ -26,6 +33,7 @@ public class TaskAgent {
                 .orElseThrow();
 
         String result = analysisTool.execute(goal);
+        memory.remember("RESULT: "+result);
 
         return """
                 AGENT PLAN:
@@ -34,5 +42,9 @@ public class TaskAgent {
                 TOOL RESULT:
                 %s
                 """.formatted(plan, result);
+    }
+
+    public List<String> memory() {
+        return memory.recall();
     }
 }
