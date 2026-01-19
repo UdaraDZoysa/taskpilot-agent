@@ -19,67 +19,6 @@ public class TaskAgent {
         this.memory = memory;
     }
 
-//    public String execute(String goal) {
-//
-//        memory.remember("GOAL: " + goal);
-//
-//        // 1. Ask planner if RAG is needed
-//        String plan = taskPlanner.plan(goal);
-//        memory.remember("PLAN: " + plan);
-//
-//        boolean needRag = plan.contains("NEED_RAG: YES");
-//
-//        String ragContext = "";
-//
-//        if (needRag) {
-//            Tool ragTool = tools.stream()
-//                    .filter(t -> t.name().equals("RagSearchTool"))
-//                    .findFirst()
-//                    .orElseThrow();
-//
-//            // Extract query from planner output
-//            String query = plan.split("QUERY:")[1].split("\n")[0].trim();
-//
-//            ragContext = ragTool.execute(query);
-//            memory.remember("RAG: " + ragContext);
-//        }
-//
-//        // 2. Build final reasoning prompt
-//        String finalPrompt = """
-//        You are an expert AI.
-//
-//        Use the CONTEXT below to answer the USER QUESTION.
-//        If the context is empty, answer using your own knowledge.
-//
-//        CONTEXT:
-//        %s
-//
-//        USER QUESTION:
-//        %s
-//
-//        Provide a clear, helpful, well-structured answer.
-//        """.formatted(ragContext, goal);
-//
-//        // 3. Ask the LLM to produce final answer
-//        Tool analysisTool = tools.stream()
-//                .filter(t -> t.name().equals("TextAnalysisTool"))
-//                .findFirst()
-//                .orElseThrow();
-//
-//        String finalAnswer = analysisTool.execute(finalPrompt);
-//        memory.remember("FINAL: " + finalAnswer);
-//
-//        return """
-//        AGENT PLAN:
-//        %s
-//
-//        RAG CONTEXT:
-//        %s
-//
-//        FINAL ANSWER:
-//        %s
-//        """.formatted(plan, ragContext, finalAnswer);
-//    }
 public String execute(String goal) {
 
     memory.remember("GOAL: " + goal);
@@ -89,7 +28,6 @@ public String execute(String goal) {
     memory.remember("PLAN: " + plan);
 
     boolean useRag = plan.contains("IS_KNOWLEDGE_BASED: YES");
-
     String ragQuery = extract(plan, "QUERY:");
     String ragContext = "";
 
@@ -101,7 +39,7 @@ public String execute(String goal) {
     }
 
     //Build final prompt for the reasoning LLM
-    String finalPrompt = """
+    String reasoningPrompt = """
                 You are a Java expert.
 
                 Use the following KNOWLEDGE BASE if relevant.
@@ -115,9 +53,48 @@ public String execute(String goal) {
 
     //Run the reasoning model
     Tool analysisTool = findTool("TextAnalysisTool");
-    String answer = analysisTool.execute(finalPrompt);
+    String draftAnswer = analysisTool.execute(reasoningPrompt);
+    memory.remember("DRAFT ANSWER: " + draftAnswer);
 
-    memory.remember("FINAL: " + answer);
+    // Decide final output
+    String finalAnswer = draftAnswer;
+    String reviewResult = "";
+    int maxIterations = 3;
+    int iteration = 0;
+
+    while (iteration < maxIterations) {
+        System.out.println("Review iteration 01: " + iteration);
+        System.out.println("Current answer 01: " + finalAnswer);
+        String reviewPrompt = """
+            You are a senior Java reviewer.
+            
+            Review the ANSWER below.
+            
+            If it is correct and complete, respond with:
+            STATUS: OK
+            
+            If it has issues, respond with:
+            STATUS: FIX
+            IMPROVED_ANSWER: <your improved answer>
+            
+            ANSWER:
+            %s
+            """.formatted(finalAnswer);
+
+        reviewResult = analysisTool.execute(reviewPrompt);
+        memory.remember("REVIEW " + iteration + ": " + reviewResult);
+
+        if (reviewResult.contains("STATUS: OK")) {
+            break;
+        }
+
+        if (reviewResult.contains("STATUS: FIX")) {
+            finalAnswer = extract(reviewResult, "IMPROVED_ANSWER:");
+        }
+        System.out.println("Review iteration 02: " + iteration);
+        System.out.println("Current answer 02: " + finalAnswer);
+        iteration++;
+    }
 
     return """
                 AGENT PLAN:
@@ -134,7 +111,7 @@ public String execute(String goal) {
 
                 FINAL ANSWER:
                 %s
-                """.formatted(plan, useRag, ragQuery, ragContext, answer);
+                """.formatted(plan, useRag, ragQuery, ragContext, finalAnswer);
 }
 
     private Tool findTool(String name) {
