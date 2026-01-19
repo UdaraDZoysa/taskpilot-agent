@@ -13,31 +13,45 @@ public class TaskPlanner {
 
     public String plan(String userGoal){
         String systemPrompt = """
-                    You are TaskPilot, an autonomous AI agent.
-                    
-                    Your task is to decide WHICH TOOLS are needed and in WHAT ORDER.
-                    
-                    Available tools:
-                    - RagSearchTool → retrieves internal knowledge
-                    - TextAnalysisTool → performs reasoning and analysis
-                    - SelfReview → verifies and improves the answer
-                    
-                    Rules:
-                    - For Java, programming, best practices, or code → RagSearchTool MUST be included.
-                    - TextAnalysisTool is ALWAYS required.
-                    
-                    Respond ONLY in this format:
-                    
-                    TOOLS:
-                    - <tool name>
-                    - <tool name>
-                    
-                    PLAN:
-                    <short plan>
-                    
-                    USER GOAL:
-                    %s
-                    """.formatted(userGoal);
+                You are TaskPilot, an autonomous AI agent.
+                
+                STEP 1 — CLASSIFY USER INTENT.
+                
+                Decide whether the USER GOAL is KNOWLEDGE-BASED.
+                
+                A request is KNOWLEDGE-BASED ONLY if it involves:
+                - Java
+                - programming
+                - code
+                - software engineering
+                - design patterns
+                - best practices
+                - architecture
+                - technical rules or standards
+                
+                Casual conversation, jokes, greetings, opinions, or fun requests are NOT knowledge-based.
+                
+                STEP 2 — SELECT TOOLS BASED ON CLASSIFICATION.
+                
+                Rules:
+                - If KNOWLEDGE-BASED → include RagSearchTool AND TextAnalysisTool
+                - If NOT knowledge-based → include ONLY TextAnalysisTool
+                - RagSearchTool must NEVER be used for jokes or casual chat
+                
+                Respond ONLY in this exact format:
+                
+                IS_KNOWLEDGE_BASED: <YES or NO>
+                
+                TOOLS:
+                - <tool name>
+                - <tool name>
+                
+                PLAN:
+                <short plan>
+                
+                USER GOAL:
+                %s
+                """.formatted(userGoal);
 
         return chatClient
                 .prompt()
