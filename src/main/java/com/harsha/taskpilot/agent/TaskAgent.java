@@ -27,91 +27,81 @@ public String execute(String goal) {
     String plan = taskPlanner.plan(goal);
     memory.remember("PLAN: " + plan);
 
-    boolean useRag = plan.contains("IS_KNOWLEDGE_BASED: YES");
-    String ragQuery = extract(plan, "QUERY:");
-    String ragContext = "";
+    // Extract tool execution chain
+    List<String> toolChain = extractTools(plan);
 
-    // If RAG is needed → fetch knowledge
-    if (useRag && !ragQuery.equals("NONE")) {
-        Tool ragTool = findTool("RagSearchTool");
-        ragContext = ragTool.execute(ragQuery);
-        memory.remember("RAG CONTEXT: " + ragContext);
+    String context = "";
+    String answer = "";
+
+    // Execute tools in order
+    for (String toolName : toolChain) {
+
+        Tool tool = findTool(toolName);
+
+        switch (toolName) {
+
+            case "RagSearchTool" -> {
+                context = tool.execute(goal);
+                memory.remember("RAG CONTEXT: " + context);
+            }
+
+            case "TextAnalysisTool" -> {
+                String prompt = """
+                    You are a Java expert.
+                    
+                    Use the following CONTEXT if relevant.
+                    
+                    CONTEXT:
+                    %s
+                    
+                    USER QUESTION:
+                    %s
+                    """.formatted(context, goal);
+
+                answer = tool.execute(prompt);
+                memory.remember("DRAFT ANSWER: " + answer);
+            }
+            default -> throw new IllegalStateException("Unknown tool: " + toolName);
+        }
     }
 
-    //Build final prompt for the reasoning LLM
-    String reasoningPrompt = """
-                You are a Java expert.
-
-                Use the following KNOWLEDGE BASE if relevant.
-
-                KNOWLEDGE:
-                %s
-
-                USER QUESTION:
-                %s
-                """.formatted(ragContext, goal);
-
-    //Run the reasoning model
+    // ENFORCED self-review (agent policy, not planner)
     Tool analysisTool = findTool("TextAnalysisTool");
-    String draftAnswer = analysisTool.execute(reasoningPrompt);
-    memory.remember("DRAFT ANSWER: " + draftAnswer);
 
-    // Decide final output
-    String finalAnswer = draftAnswer;
-    String reviewResult = "";
-    int maxIterations = 3;
-    int iteration = 0;
-
-    while (iteration < maxIterations) {
-        System.out.println("Review iteration 01: " + iteration);
-        System.out.println("Current answer 01: " + finalAnswer);
-        String reviewPrompt = """
+    String reviewPrompt = """
             You are a senior Java reviewer.
             
             Review the ANSWER below.
             
-            If it is correct and complete, respond with:
+            If correct, reply with:
             STATUS: OK
             
-            If it has issues, respond with:
+            If incorrect, reply with:
             STATUS: FIX
             IMPROVED_ANSWER: <your improved answer>
             
             ANSWER:
             %s
-            """.formatted(finalAnswer);
+            """.formatted(answer);
 
-        reviewResult = analysisTool.execute(reviewPrompt);
-        memory.remember("REVIEW " + iteration + ": " + reviewResult);
+    String review = analysisTool.execute(reviewPrompt);
+    memory.remember("REVIEW: " + review);
 
-        if (reviewResult.contains("STATUS: OK")) {
-            break;
-        }
-
-        if (reviewResult.contains("STATUS: FIX")) {
-            finalAnswer = extract(reviewResult, "IMPROVED_ANSWER:");
-        }
-        System.out.println("Review iteration 02: " + iteration);
-        System.out.println("Current answer 02: " + finalAnswer);
-        iteration++;
+    if (review.contains("STATUS: FIX")) {
+        answer = extract(review, "IMPROVED_ANSWER:");
+        memory.remember("FINAL (FIXED): " + answer);
     }
 
     return """
-                AGENT PLAN:
-                %s
-
-                RAG USED:
-                %s
-
-                RAG QUERY:
-                %s
-
-                RAG CONTEXT:
-                %s
-
-                FINAL ANSWER:
-                %s
-                """.formatted(plan, useRag, ragQuery, ragContext, finalAnswer);
+        AGENT PLAN:
+        %s
+        
+        TOOLS EXECUTED:
+        %s
+        
+        FINAL ANSWER:
+        %s
+        """.formatted(plan, toolChain, answer);
 }
 
     private Tool findTool(String name) {
@@ -129,6 +119,14 @@ public String execute(String goal) {
         }
         return "NONE";
     }
+
+    private List<String> extractTools(String plan) {
+        return plan.lines()
+                .filter(line -> line.startsWith("- "))
+                .map(line -> line.replace("- ", "").trim())
+                .toList();
+    }
+
     public List<String> memory() {
         return memory.recall();
     }

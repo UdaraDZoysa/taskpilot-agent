@@ -13,32 +13,32 @@ public class TaskPlanner {
 
     public String plan(String userGoal){
         String systemPrompt = """
-                You are TaskPilot, an autonomous AI agent.
-                Your job is to classify the USER GOAL.
-            
-                  A question is KNOWLEDGE_BASED if it involves:
-                  - Java
-                  - programming
-                  - code
-                  - best practices
-                  - design
-                  - software engineering
-                  - rules
-                  - standards
-                  - architecture
-            
-                  If it is KNOWLEDGE_BASED → RagSearchTool MUST be used.
-                  If it is NOT knowledge-based (jokes, greetings, casual chat) → RagSearchTool must NOT be used.
-           
-                  You MUST respond ONLY in this exact format:
-           
-                  IS_KNOWLEDGE_BASED: <YES or NO>
-                  QUERY: <what should be searched or NONE>
-                  PLAN: <short plan>
-           
-                USER GOAL:
-                  %s
-            """.formatted(userGoal);
+                    You are TaskPilot, an autonomous AI agent.
+                    
+                    Your task is to decide WHICH TOOLS are needed and in WHAT ORDER.
+                    
+                    Available tools:
+                    - RagSearchTool → retrieves internal knowledge
+                    - TextAnalysisTool → performs reasoning and analysis
+                    - SelfReview → verifies and improves the answer
+                    
+                    Rules:
+                    - For Java, programming, best practices, or code → RagSearchTool MUST be included.
+                    - TextAnalysisTool is ALWAYS required.
+                    
+                    Respond ONLY in this format:
+                    
+                    TOOLS:
+                    - <tool name>
+                    - <tool name>
+                    
+                    PLAN:
+                    <short plan>
+                    
+                    USER GOAL:
+                    %s
+                    """.formatted(userGoal);
+
         return chatClient
                 .prompt()
                 .system(systemPrompt)
